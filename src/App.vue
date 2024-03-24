@@ -7,6 +7,7 @@
       @compositionstart="handleCompositionStart"
       @ready="handleReady"
       @textChange="handleTextChange"
+      @selectionChange="handleSelectionChange"
   />
 </template>
 
@@ -62,6 +63,40 @@ export default {
       quill.setText(this.initialText, 'api');
       this.initialContents = quill.getContents();
       this.currentContents = quill.getContents();
+    },
+
+    // 選択範囲変更時のフック：ここで選択範囲に対する処理を行う
+    handleSelectionChange({range, oldRange, source}) {
+      // 範囲選択の場合は処理しない
+      if (range.length !== 0) return;
+
+      const quill = this.$refs.quill.getQuill();
+      const contents = quill.getContents();
+
+      // 打ち消し線の範囲内にカーソルを移動させた場合、打ち消し線の外側に移動させる
+      let retain = 0;
+      for (const op of contents.ops) {
+        if (op.retain) {
+          retain += op.retain;
+        } else if (op.insert) {
+          if(op.attributes?.strike ) {
+            console.log(JSON.stringify({op, range}))
+            if (range.index > retain && range.index < retain + op.insert.length) {
+              // 左から右への移動の場合、打ち消し線の右端までカーソルを移動させる、逆も然り
+              const isLeftToRight = range.index > oldRange.index;
+              if (isLeftToRight) {
+                quill.setSelection(retain + op.insert.length, 0, 'api');
+              } else {
+                quill.setSelection(retain, 0, 'api');
+              }
+              break;
+            }
+            retain += op.insert.length;
+          } else {
+            retain += op.insert.length;
+          }
+        }
+      }
     },
 
     // テキスト変更時のフック：ここで差分計算やスタイルの適用を行う
